@@ -1,6 +1,23 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, session, Response
 from flask_restful import Resource, Api, reqparse
 import pyrebase
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import LoginManager
+from flask_session import Session
+
+
+########################################################
+            # Flask Initialization #
+########################################################
+
+# Initialize Flask and the API
+app = Flask(__name__)
+api = Api(app)
+login = LoginManager(app)
+SESSION_TYPE = "memcached"
+app.config.from_object(__name__)
+Session(app)
+
 
 ########################################################
         # Database and Resource Initialization #
@@ -229,7 +246,7 @@ class UserList(Resource):
         parser.add_argument("first_name", required=True)
         parser.add_argument("last_name", required=True)
         parser.add_argument("email", required=True)
-        parser.add_argument("password_hash", required=True)
+        parser.add_argument("password", required=True)
         parser.add_argument("type", required=True)
 
         new_id = db.child("NextID").get().val()
@@ -239,19 +256,55 @@ class UserList(Resource):
         db.child("Users").child(new_id).child("First Name").set(args["first_name"])
         db.child("Users").child(new_id).child("Last Name").set(args["last_name"])
         db.child("Users").child(new_id).child("Email").set(args["email"])
-        db.child("Users").child(new_id).child("Password Hash").set(args["password_hash"])
+        db.child("Users").child(new_id).child("Password Hash").set(generate_password_hash(args["password"]))
         db.child("Users").child(new_id).child("ID").set(new_id)
         db.child("Users").child(new_id).child("Type").set(args["type"])
 
+        firebase.auth().create_user_with_email_and_password(args["email"], args["password"])
+
         return 201
 
-########################################################
-            # Flask Initialization #
-########################################################
+class Login(Resource):
+    """
+    For the management of logging in Users.
+    """
 
-# Initialize Flask and the API
-app = Flask(__name__)
-api = Api(app)
+    def get(self):
+        return Response(render_template("login.html"))
+
+    def post(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument("email", required=True)
+        parser.add_argument("password", required=True)
+
+        args = parser.parse_args()
+        firebase_user = None
+        try:
+            firebase_user = firebase.auth().sign_in_with_email_and_password(args["email"], args["password"])
+        except:
+            return {"message": "Invalid Login Credentials"}, 401
+        session["firebase_user"] = firebase_user
+        users = db.child("Users").get().each()
+        user = None
+        for current in users:
+            #if current.child("Email").get().val() == args["email"]:
+            #    user = current
+            if db.child("Users").child(current.key()).child("Email").get().val() == args["email"]:
+                user = db.child("Users").child(current.key())
+        if user is None:
+            session["firebase_user"] = None
+            return {"message": "User Not Found"}, 404
+
+        if not check_password_hash(user.child("Password Hash").get().val(), args["password"]):
+            session["firebase_user"] = None
+            print("Failed the password hash!\n")
+            return {"message": "Invalid Login Credentials"}, 401
+
+        session["user_id"] = user.child("ID").get().val()
+        session["user_type"] = user.child("Type").get().val()
+        return {"message": "Success!"}, 200
+
+        
 
 # Add Resources to the API
 api.add_resource(IssueList, "/issues")
@@ -260,10 +313,14 @@ api.add_resource(UserList, "/users")
 api.add_resource(Issue, "/issues/<int:issue_id>")
 api.add_resource(Project, "/projects/<int:project_id>")
 api.add_resource(User, "/users/<int:user_id>")
+api.add_resource(Login, "/login")
 
 @app.route("/")
 def index():
     return "Hello World!"
 
+
+
 if __name__ == "__main__":
     app.run()
+    
