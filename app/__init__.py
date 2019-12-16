@@ -3,6 +3,7 @@ from flask import session as server_session
 from flask_restful import Api
 from flask_session import Session
 from flask_login import LoginManager
+from flask_bootstrap import Bootstrap
 import pyrebase
 import os
 
@@ -16,6 +17,7 @@ app.config["SECRET_KEY"] = os.urandom(24)
 app.config["SESSION_TYPE"] = "filesystem"
 
 Session(app)
+bootstrap = Bootstrap(app)
 
 firebaseConfig = {
     "apiKey": "AIzaSyAOt2oJnOJHOLgyFHApNINzAqrtS2B0lcY",

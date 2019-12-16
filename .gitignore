@@ -3,3 +3,4 @@ __pycache__/
 main_workspace.code-workspace
 env/
 flask_session/
+old/
