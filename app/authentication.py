@@ -33,3 +33,27 @@ class User:
 
     def get_id(self):
         return str(self.firebase_user_id)
+
+    def is_admin(self):
+        value = db.child("Users").child(self.firebase_user_id).child("Type").get(token=self.firebase_token).val()
+        if value == "admin":
+            return True
+        else:
+            return False
+
+    def is_developer(self):
+        value = db.child("Users").child(self.firebase_user_id).child("Type").get(token=self.firebase_token).val()
+        if value == "developer":
+            return True
+        else:
+            return False
+
+    def is_client(self):
+        value = db.child("Users").child(self.firebase_user_id).child("Type").get(token=self.firebase_token).val()
+        if value == "developer":
+            return True
+        else:
+            return False
+
+    def get_type(self):
+        return db.child("Users").child(self.firebase_user_id).child("Type").get(token=self.firebase_token).val()

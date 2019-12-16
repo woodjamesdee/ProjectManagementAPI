@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>Create New Issue</h1>
+    <form action="" method="post">
+        {{ create_issue.hidden_tag() }}
+        <p>
+            {{ create_issue.name.label }}<br>
+            {{ create_issue.name(size=64) }}<br>
+            {% for error in create_issue.name.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ create_issue.description.label }}<br>
+            {{ create_issue.description(size=64) }}<br>
+            {% for error in create_issue.description.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ create_issue.priority.label }}<br>
+            {{ create_issue.priority(size=5) }}<br>
+            {% for error in create_issue.priority.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ create_issue.project.label }}<br>
+            {{ create_issue.project(size=5) }}<br>
+            {% for error in create_issue.project.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>{{ create_issue.submit_issue() }}</p>
+    </form>
+    <br>
+    {% if create_project %}
+    <h1>Create New Project</h1>
+    <form action="" method="post">
+        {{ create_project.hidden_tag() }}
+        <p>
+            {{ create_project.name.label }}<br>
+            {{ create_project.name(size=64) }}<br>
+            {% for error in create_project.name.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ create_project.description.label }}<br>
+            {{ create_project.description(size=64) }}<br>
+            {% for error in create_project.description.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ create_project.begin_date.label }}<br>
+            {{ create_project.begin_date(size=64) }}<br>
+            {% for error in create_project.begin_date.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ create_project.end_date.label }}<br>
+            {{ create_project.end_date(size=64) }}<br>
+            {% for error in create_project.end_date.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>{{ create_project.submit_project() }}</p>
+    </form>
+    {% endif %}
+    <br>
+    {% if add_user %}
+    <h1>Add User To Project</h1>
+    <form action="" method="post">
+        {{ add_user.hidden_tag() }}
+        <p>
+            {{ add_user.user_to_add.label }}<br>
+            {{ add_user.user_to_add(size=5) }}<br>
+            {% for error in add_user.user_to_add.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ add_user.project_to_add_to.label }}<br>
+            {{ add_user.project_to_add_to(size=5) }}<br>
+            {% for error in add_user.project_to_add_to.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>{{ add_user.submit_add_user() }}</p>
+    </form>
+    {% endif %}
+{% endblock %}

@@ -2,12 +2,14 @@ from app import db, firebase
 from flask_restful import Resource, reqparse
 from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
+from flask import session as server_session
+from flask import request
+from flask_cors import cross_origin
 
+class CredResource(Resource):
+    pass
 
-class AuthResource(Resource):
-    method_decorators = [login_required]
-
-class Issue(AuthResource):
+class Issue(CredResource):
     """
     Typically a request or intended item of action, an issue is a collection of information able to be categorized. Issues can be OPEN (in-progress) or CLOSED (complete).
 
@@ -22,8 +24,11 @@ class Issue(AuthResource):
     status: The status of this Issue, whether OPEN or CLOSED.
     """
 
-    def get(self, issue_id):
-        idToken = current_user.firebase_token
+    def post(self, issue_id):
+        parser = reqparse.RequestParser()
+        parser.add_argument("idToken", required=True)
+        args = parser.parse_args()
+        idToken = args["idToken"]
         entries = db.child("Issues").get(token=idToken).each()
         entry_keys = []
         for entry in entries:
@@ -51,7 +56,7 @@ class Issue(AuthResource):
 
         return data, 200
 
-class Project(AuthResource):
+class Project(CredResource):
     """
     A collection of Issues which are all related by some common purpose. Could also be referred to as a "Milestone." Projects can be OPEN (in-progress) or CLOSED (complete).
 
@@ -64,36 +69,70 @@ class Project(AuthResource):
     begin_date: The date that work on this Project begins. Ex. 9 January 2020
     end_date: The date that work on this Project is projected to be complete. Ex. 8 January 2021
     status: The status of this Project, whether OPEN or CLOSED.
+    assignees: The individual Users who are members of this Project.
     """
-
-    def get(self, project_id):
-        idToken = current_user.firebase_token
+    def post(self, project_id):
+        parser = reqparse.RequestParser()
+        parser.add_argument("id", required=True)   
+        parser.add_argument("type", required=True) 
+        parser.add_argument("idToken", required=True)
+        args = parser.parse_args()
+        idToken = args["idToken"]
         entries = db.child("Projects").get(token=idToken).each()
         entry_keys = []
         for entry in entries:
-            entry_keys.append(entry.key())
+            entry_keys.append(str(entry.key()))
 
-        if project_id not in entry_keys:
+        if str(project_id) not in entry_keys:
+            print("Project not found!")
+            print("Project ID: ", project_id)
             return {"error": "Project Not Found"}, 404
 
-        name = db.child("Projects").child(project_id).child("Name").get(token=idToken).val()
-        description = db.child("Projects").child(project_id).child("Description").get(token=idToken).val()
-        begin_date = db.child("Projects").child(project_id).child("Begin Date").get(token=idToken).val()
-        end_date = db.child("Projects").child(project_id).child("End Date").get(token=idToken).val()
-        status = db.child("Projects").child(project_id).child("Status").get(token=idToken).val()
+        if args["id"] == "" and args["type"] == "":
+            # Treat as a GET request
+            name = db.child("Projects").child(project_id).child("Name").get(token=idToken).val()
+            description = db.child("Projects").child(project_id).child("Description").get(token=idToken).val()
+            begin_date = db.child("Projects").child(project_id).child("Begin Date").get(token=idToken).val()
+            end_date = db.child("Projects").child(project_id).child("End Date").get(token=idToken).val()
+            status = db.child("Projects").child(project_id).child("Status").get(token=idToken).val()
+            assignees = db.child("Projects").child(project_id).child("Assignees").get(token=idToken).val()
+            issues = db.child("Projects").child(project_id).child("Issues").get(token=idToken).val()
 
-        data = {
-            "name": name,
-            "description": description,
-            "id": project_id,
-            "begin_date": begin_date,
-            "end_date": end_date,
-            "status": status
-        }
+            data = {
+                "name": name,
+                "description": description,
+                "id": project_id,
+                "begin_date": begin_date,
+                "end_date": end_date,
+                "status": status,
+                "assignees": assignees,
+                "issues": issues
+            }
 
-        return data, 200
+            return {"data": data} , 200
 
-class UserResource(AuthResource):
+        request_type = args["type"]
+        if request_type == "user":
+            current_users = db.child("Projects").child(project_id).child("Assignees").get(token=idToken).val()
+            if current_users is None or current_users == "":
+                current_users = [int(args["id"])]
+            else:
+                current_users.append(int(args["id"]))
+            db.child("Projects").child(project_id).child("Assignees").set(current_users, token=idToken)
+        elif request_type == "issue":
+            current_issues = db.child("Projects").child(project_id).child("Issues").get(token=idToken).val()
+            if current_issues is None or current_issues == "":
+                current_issues = [int(args["id"])]
+            else:
+                current_issues.append(int(args["id"]))
+            db.child("Projects").child(project_id).child("Issues").set(current_issues, token=idToken)
+        else:
+            return {"error": "Bad ID Type"}, 400
+        
+        return 201
+
+
+class UserResource(CredResource):
     """
     An individual who may use the API in some capacity. A User has various permissions depending on the type of User that they are.
 
@@ -108,8 +147,11 @@ class UserResource(AuthResource):
     authorized: If the user is currently logged in (authorized). Ex. "True"
     """
 
-    def get(self, user_id):
-        idToken = current_user.firebase_token
+    def post(self, user_id):
+        parser = reqparse.RequestParser()
+        parser.add_argument("idToken", required=True)
+        args = parser.parse_args()
+        idToken = args["idToken"]
         entries = db.child("Users").get(token=idToken).each()
         entry_keys = []
         for entry in entries:
@@ -133,33 +175,36 @@ class UserResource(AuthResource):
             "authorized": authorized
         }
 
-        return data, 200
+        return {"data": data}, 200
 
-class IssueList(AuthResource):
+class IssueList(CredResource):
     """
     A collection of Issues.
     """
-
-    def get(self):
-        idToken = current_user.firebase_token
-        entries = db.child("Issues").get(token=idToken).each()
-        entry_keys = []
-        for entry in entries:
-            entry_keys.append(entry.key())
-
-        return {"ids": entry_keys}, 200
-
     def post(self):
-        idToken = current_user.firebase_token
         parser = reqparse.RequestParser()
         parser.add_argument("name", required=True)
         parser.add_argument("description", required=True)
         parser.add_argument("priority", required=True)
-
-        new_id = db.child("NextID").get(token=idToken).val()
-        db.child("NextID").set(new_id + 1, token=idToken)
+        parser.add_argument("idToken", required=True)
 
         args = parser.parse_args()
+
+        idToken = args["idToken"]
+        
+        if args["name"] == "" and args["description"] == "" and args["priority"] == "":
+            # Treat as a GET request where only idToken is passed for authentication.
+            entries = db.child("Issues").get(token=idToken).each()
+            entry_keys = []
+            for entry in entries:
+                entry_keys.append(entry.key())
+
+            return {"ids": entry_keys}, 200
+
+        new_id = db.child("NextID").get(token=idToken).val()
+        db.child("NextID").set((new_id + 1), token=idToken)
+
+        
         db.child("Issues").child(new_id).child("Name").set(args["name"], token=idToken)
         db.child("Issues").child(new_id).child("Description").set(args["description"], token=idToken)
         db.child("Issues").child(new_id).child("Priority").set(args["priority"], token=idToken)
@@ -168,32 +213,34 @@ class IssueList(AuthResource):
         db.child("Issues").child(new_id).child("Labels").set("", token=idToken)
         db.child("Issues").child(new_id).child("Status").set("OPEN", token=idToken)
 
-        return 201
+        return {"id": new_id}, 201
 
-class ProjectList(AuthResource):
+class ProjectList(CredResource):
     """
     A collection of Projects.
     """
-
-    def get(self):
-        idToken = current_user.firebase_token
-        entries = db.child("Projects").get(token=idToken).each()
-        entry_keys = []
-        for entry in entries:
-            entry_keys.append(entry.key())
-
-        return {"ids": entry_keys}, 200
-
     def post(self):
-        idToken = current_user.firebase_token
         parser = reqparse.RequestParser()
+        parser.add_argument("idToken", required=True)
         parser.add_argument("name", required=True)
         parser.add_argument("description", required=True)
         parser.add_argument("begin_date", required=True)
         parser.add_argument("end_date", required=True)
 
+        args = parser.parse_args()
+        idToken = args["idToken"]
+
+        if args["name"] == "" and args["description"] == "" and args["begin_date"] == "" and args["end_date"] == "":
+            # Treat as a GET request
+            entries = db.child("Projects").get(token=idToken).each()
+            entry_keys = []
+            for entry in entries:
+                entry_keys.append(entry.key())
+
+            return {"ids": entry_keys}, 200
+
         new_id = db.child("NextID").get(token=idToken).val()
-        db.child("NextID").set(new_id + 1, token=idToken)
+        db.child("NextID").set((new_id + 1), token=idToken)
 
         args = parser.parse_args()
         db.child("Projects").child(new_id).child("Name").set(args["name"], token=idToken)
@@ -203,37 +250,39 @@ class ProjectList(AuthResource):
         db.child("Projects").child(new_id).child("ID").set(new_id, token=idToken)
         db.child("Projects").child(new_id).child("Issues").set("", token=idToken)
         db.child("Projects").child(new_id).child("Status").set("OPEN", token=idToken)
+        db.child("Projects").child(new_id).child("Assignees").set("", token=idToken)
 
-        return 201
+        return {"id": new_id}, 201
 
-class UserList(AuthResource):
+class UserList(CredResource):
     """
     A collection of Users.
     """
-
-    def get(self):
-        idToken = current_user.firebase_token
-        entries = db.child("Users").get(token=idToken).each()
-        entry_keys = []
-        for entry in entries:
-            entry_keys.append(entry.key())
-
-        return {"ids": entry_keys}, 200
-
-
     def post(self):
-        idToken = current_user.firebase_token
         parser = reqparse.RequestParser()
+        parser.add_argument("idToken", required=True)
         parser.add_argument("first_name", required=True)
         parser.add_argument("last_name", required=True)
         parser.add_argument("email", required=True)
         parser.add_argument("password", required=True)
         parser.add_argument("type", required=True)
 
-        new_id = db.child("NextID").get(token=idToken).val()
-        db.child("NextID").set(new_id + 1, token=idToken)
-
         args = parser.parse_args()
+        idToken = args["idToken"]
+
+        if args["first_name"] == "" and args["last_name"] == "" and args["email"] == "" and args["password"] == "" and args["type"] == "":
+            # Treat as GET request
+            entries = db.child("Users").get(token=idToken).each()
+            entry_keys = []
+            for entry in entries:
+                entry_keys.append(entry.key())
+
+            return {"ids": entry_keys}, 200
+
+        new_id = db.child("NextID").get(token=idToken).val()
+        db.child("NextID").set((new_id + 1), token=idToken)
+
+        
         db.child("Users").child(new_id).child("First Name").set(args["first_name"], token=idToken)
         db.child("Users").child(new_id).child("Last Name").set(args["last_name"], token=idToken)
         db.child("Users").child(new_id).child("Email").set(args["email"], token=idToken)
@@ -244,4 +293,4 @@ class UserList(AuthResource):
 
         firebase.auth().create_user_with_email_and_password(args["email"], args["password"])
 
-        return 201
+        return {"id": new_id}, 201
