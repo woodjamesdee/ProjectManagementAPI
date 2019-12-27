@@ -27,34 +27,54 @@ class Issue(CredResource):
     def post(self, issue_id):
         parser = reqparse.RequestParser()
         parser.add_argument("idToken", required=True)
+        parser.add_argument("id", required=True)
         args = parser.parse_args()
         idToken = args["idToken"]
         entries = db.child("Issues").get(token=idToken).each()
         entry_keys = []
+        
         for entry in entries:
             entry_keys.append(entry.key())
 
         if issue_id not in entry_keys:
             return {"error": "Issue Not Found"}, 404
 
-        name = db.child("Issues").child(issue_id).child("Name").get(token=idToken).val()
-        description = db.child("Issues").child(issue_id).child("Description").get(token=idToken).val()
-        assignees = db.child("Issues").child(issue_id).child("Assignees").get(token=idToken).val()
-        priority = db.child("Issues").child(issue_id).child("Priority").get(token=idToken).val()
-        labels = db.child("Issues").child(issue_id).child("Labels").get(token=idToken).val()
-        status = db.child("Issues").child(issue_id).child("Status").get(token=idToken).val()
+        if args["id"] == "":
 
-        data = {
-            "name": name,
-            "description": description,
-            "id": issue_id,
-            "assignees": assignees,
-            "priority": priority,
-            "labels": labels,
-            "status": status
-        }
+            name = db.child("Issues").child(issue_id).child("Name").get(token=idToken).val()
+            description = db.child("Issues").child(issue_id).child("Description").get(token=idToken).val()
+            assignees = db.child("Issues").child(issue_id).child("Assignees").get(token=idToken).val()
+            priority = db.child("Issues").child(issue_id).child("Priority").get(token=idToken).val()
+            labels = db.child("Issues").child(issue_id).child("Labels").get(token=idToken).val()
+            status = db.child("Issues").child(issue_id).child("Status").get(token=idToken).val()
 
-        return data, 200
+            data = {
+                "name": name,
+                "description": description,
+                "id": issue_id,
+                "assignees": assignees,
+                "priority": priority,
+                "labels": labels,
+                "status": status
+            }
+
+            return data, 200
+
+        #print("In issue post")
+
+        current_users = db.child("Issues").child(issue_id).child("Assignees").get(token=idToken).val()
+        if current_users is None or current_users == "":
+            current_users = [int(args["id"])]
+            #print("Creating users list")
+        else:
+            current_users.append(int(args["id"]))
+            #print("Appending to users list")
+        db.child("Issues").child(issue_id).child("Assignees").set(current_users, token=idToken)
+        #print("Set assignees")
+        
+        return 201
+
+        
 
 class Project(CredResource):
     """

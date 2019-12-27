@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block app_content %}
+    <div class="body-content">
+        <div class="container-fluid">
+            <div class="row">
+                {% if project and create_issue and self_assign %}
+                <div class="col-md-4">
+                    <h1>Project Progress Report</h1><br>
+                    <i><b><a href='{{  project.url }}'>{{ project.name }}</a></b></i><br>
+                    Start Date: {{ project.start_date }} <br>
+                    Projected Completion Date: {{ project.end_date }} <br>
+                    Issues Created: {{ project.issue_count }} <br>
+                    Issues Completed: {{ project.issue_percent }}% <br>
+                </div>
+                <div class="col-md-4">
+                    <h1>Project Issues</h1>
+                    {% if issues %}
+                        {% for issue in issues %}
+                            <i><b><a href='{{ issue.url }}'>{{ issue.name }}</a></b></i><br>
+                            Description: {{ issue.description }} <br>
+                            Priority: {{ issue.priority }} <br>
+                            Labels: {{ issue.labels }} <br>
+                            Assignees: {{ issue.assignees }} <br> <br>
+                        {% endfor %}
+                    {% else %}
+                    No issues in project.
+                    {% endif %}
+                </div>
+                <div class="col-md-4">
+                    <h1>Create New Issue</h1>
+                    {{ wtf.quick_form(create_issue) }}
+                    <br>
+                    <h1>Self-Assign To Issue</h1>
+                    <br>
+                    {{ wtf.quick_form(self_assign) }}
+                    {% if assign_other %}
+                    <h1>Assign User To Issue</h1>
+                    <br>
+                    {{ wtf.quick_form(assign_other) }}
+                    {% endif %}
+                </div>
+                {% else %}
+                This project does not exist.
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <br>
+{% endblock %}

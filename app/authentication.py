@@ -50,7 +50,7 @@ class User:
 
     def is_client(self):
         value = db.child("Users").child(self.firebase_user_id).child("Type").get(token=self.firebase_token).val()
-        if value == "developer":
+        if value == "client":
             return True
         else:
             return False

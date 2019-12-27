@@ -3,12 +3,13 @@ from flask import session as server_session
 from flask_restful import Api
 from app import app, api, login_manager, db, firebase
 from flask_login import current_user, login_user, logout_user, login_required
-from app.forms import LoginForm, RegistrationForm, CreateIssueForm, CreateProjectForm, AddUserToProjectForm
+from app.forms import LoginForm, RegistrationForm, CreateIssueForm, CreateProjectForm, AddUserToProjectForm, ClientCreateIssueForm, SelfAssignToIssueForm, AddUserToIssueForm, SelfAssignInIssueForm, AddUserToIssueWithinForm
 from app.resources import IssueList, ProjectList, UserList, Issue, Project, UserResource
 from app.authentication import User
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.urls import url_parse
 import requests
+from app.data import ProjectData, IssueData
 
 api.add_resource(IssueList, "/issues")
 api.add_resource(ProjectList, "/projects")
@@ -152,6 +153,7 @@ def home():
     add_user_to_project = AddUserToProjectForm()
     add_user_to_project.project_to_add_to.choices = project_choices_2
     add_user_to_project.user_to_add.choices = user_choices
+    client_create_issue = ClientCreateIssueForm()
     if request.method == "POST":
         try:
             if create_issue.submit_issue.data and create_issue.validate():
@@ -213,10 +215,266 @@ def home():
                 else:
                     message = "Unsuccessful in adding user to project. Status Code: {}".format(response.status_code)
                     flash(message)
+            elif client_create_issue.submit_issue.data and client_create_issue.validate():
+                idToken_key = "{}_idToken".format(int(current_user.get_id()))
+                new_issue_request = {
+                    "name": create_issue.name.data,
+                    "description": create_issue.description.data,
+                    "priority": create_issue.priority.data,
+                    "idToken": server_session[idToken_key]
+                }
+                base_url_trimmed = request.base_url[:len(request.base_url) - 4]
+                full_url = "{}{}".format(base_url_trimmed, api.url_for(IssueList)[1:])
+                response = requests.post(full_url, json=new_issue_request)
+                add_issue_to_project_request = {
+                    "idToken": server_session[idToken_key],
+                    "id": response.content.decode()[7:len(response.content.decode()) - 2],
+                    "type": "issue"
+                }
+                endpoint = "/{}".format(project_choices[0][0])
+                full_url = "{}{}{}".format(base_url_trimmed, api.url_for(ProjectList)[1:], endpoint)
+                response = requests.post(full_url, json=add_issue_to_project_request)
+                if response.status_code == 201 or response.status_code == 200:
+                    flash("Successfully added new issue to project.")
+                else:
+                    message = "Unsuccessful in adding new issue to project. Status Code: {}".format(response.status_code)
+                    flash(message)
         except:
                 flash("An internal error occurred while processing this request.")
 
     if current_user.is_admin():
-        return render_template("home_template.html", title="Home", create_issue=create_issue, create_project=create_project, add_user=add_user_to_project)
+        projs = []
+        for current_project in project_choices:
+            projs.append(ProjectData(idToken, current_project[0], request.host_url))
+        admin_issues = []
+        #for current_project in project_choices:
+        #    admin_issues.append(IssueData(idToken, current_project[0], request.host_url))
+        issues = db.child("Issues").get(token=idToken).each()
+        for issue in issues:
+            issue_key = int(issue.key())
+            if isinstance(db.child("Issues").child(issue_key).child("Assignees").get(token=idToken).val(), list):
+                if int(current_user.get_id()) in db.child("Issues").child(issue_key).child("Assignees").get(token=idToken).val():
+                    admin_issues.append(IssueData(idToken, issue_key, request.host_url, project_choices[0][0]))
+        return render_template("admin_home_template.html", title="Home", create_issue=create_issue, create_project=create_project, add_user=add_user_to_project, projects=projs, issues=admin_issues)
+    elif current_user.is_client():
+        if len(project_choices) > 0:
+            project = ProjectData(idToken, project_choices[0][0], request.host_url)
+        else:
+            project = None
+        return render_template("client_home_template.html", title="Home", create_issue=client_create_issue, project=project)
+    elif current_user.is_developer():
+        dev_projects = []
+        dev_issues = []
+        for current_project in project_choices:
+            dev_projects.append(ProjectData(idToken, current_project[0], request.host_url))
+        issues = db.child("Issues").get(token=idToken).each()
+        for issue in issues:
+            issue_key = int(issue.key())
+            if isinstance(db.child("Issues").child(issue_key).child("Assignees").get(token=idToken).val(), list):
+                if int(current_user.get_id()) in db.child("Issues").child(issue_key).child("Assignees").get(token=idToken).val():
+                    dev_issues.append(IssueData(idToken, issue_key, request.host_url, project_choices[0][0]))
+
+        return render_template("dev_home_template.html", title="Home", create_issue=create_issue, projects=dev_projects, issues=dev_issues)
     else:
         return render_template("home_template.html", title="Home", create_issue=create_issue)
+
+@app.route("/home/projects/<int:project_id>", methods=["GET", "POST"])
+@login_required
+def project_detail(project_id):
+    idToken = current_user.firebase_token
+    if db.child("Projects").child(project_id).get(token=idToken).val() is None:
+        return {"error": "Project not found!"}, 404
+    
+    project_assignees = db.child("Projects").child(project_id).child("Assignees").get(token=idToken).val()
+    if not current_user.is_admin():
+        if not isinstance(project_assignees, list) or int(current_user.get_id()) not in project_assignees:
+            return {"error": "User not member of this project!"}, 401
+
+    project_data = ProjectData(idToken, project_id, request.host_url)
+    issues = db.child("Projects").child(project_id).child("Issues").get(token=idToken).val()
+    project_issues = []
+    if not isinstance(issues, list):
+        project_issues = None
+    else:
+        for issue in issues:
+            project_issues.append(IssueData(idToken, issue, request.host_url, project_id))
+
+    for x in range(len(issues)):
+        issues[x] = tuple([issues[x], db.child("Issues").child(issues[x]).child("Name").get(token=idToken).val()])
+
+    dev_choices = db.child("Projects").child(project_id).child("Assignees").get(token=idToken).val()
+    if not isinstance(dev_choices, list):
+        dev_choices = None
+    else:
+        for x in range(len(dev_choices)):
+            first_name = db.child("Users").child(dev_choices[x]).child("First Name").get(token=idToken).val()
+            last_name = db.child("Users").child(dev_choices[x]).child("Last Name").get(token=idToken).val()
+            user_type = db.child("Users").child(dev_choices[x]).child("Type").get(token=idToken).val()
+            entry = "{}{} ({})".format(first_name, last_name, user_type)
+            dev_choices[x] = tuple([dev_choices[x], entry])
+
+    create_project_issue = ClientCreateIssueForm()
+    self_assign = SelfAssignToIssueForm()
+    self_assign.selected_issue.choices = issues
+    assign_other = AddUserToIssueForm()
+    assign_other.selected_issue_to_add.choices = issues
+    assign_other.selected_dev.choices = dev_choices
+
+    if request.method == "POST":
+        try:
+            if create_project_issue.submit_issue.data and create_project_issue.validate():
+                idToken_key = "{}_idToken".format(int(current_user.get_id()))
+                new_issue_request = {
+                    "name": create_project_issue.name.data,
+                    "description": create_project_issue.description.data,
+                    "priority": create_project_issue.priority.data,
+                    "idToken": server_session[idToken_key]
+                }
+                base_url_trimmed = request.base_url[:len(request.base_url) - 15]
+                full_url = "{}{}".format(base_url_trimmed, api.url_for(IssueList)[1:])
+                response = requests.post(full_url, json=new_issue_request)
+                add_issue_to_project_request = {
+                    "idToken": server_session[idToken_key],
+                    "id": response.content.decode()[7:len(response.content.decode()) - 2],
+                    "type": "issue"
+                }
+                endpoint = "/{}".format(project_id)
+                full_url = "{}projects{}".format(base_url_trimmed, endpoint)
+                response = requests.post(full_url, json=add_issue_to_project_request)
+                if response.status_code == 201 or response.status_code == 200:
+                    flash("Successfully added new issue to project.")
+                    project_data.update(idToken)
+                    #for current_issue in project_issues:
+                    #    current_issue.update(idToken)
+                    project_issues.append(IssueData(idToken, int(add_issue_to_project_request["id"]), request.host_url, project_id))
+                    issues.append(tuple([int(add_issue_to_project_request["id"]), new_issue_request["name"]]))
+                else:
+                    message = "Unsuccessful in adding new issue to project. Status Code: {}".format(response.status_code)
+                    flash(message)
+            elif self_assign.submit.data and self_assign.validate():
+                idToken_key = "{}_idToken".format(int(current_user.get_id()))
+                add_user_request = {
+                    "idToken": server_session[idToken_key],
+                    "id": int(current_user.get_id()),
+                    "type": "user"
+                }
+                base_url_trimmed = request.base_url[:len(request.base_url) - 15]
+                endpoint = "/{}".format(self_assign.selected_issue.data)
+                full_url = "{}issues{}".format(base_url_trimmed, endpoint)
+                response = requests.post(full_url, json=add_user_request)
+                if response.status_code == 201 or response.status_code == 200:
+                    flash("Successfully self-assigned to issue.")
+                    for current_issue in project_issues:
+                        current_issue.update(idToken)
+                else:
+                    message = "Unsuccessful self-assigning to issue. Status Code: {}".format(response.status_code)
+                    flash(message)
+            elif assign_other.submit_to_issue.data and assign_other.validate():
+                idToken_key = "{}_idToken".format(int(current_user.get_id()))
+                add_user_request = {
+                    "idToken": server_session[idToken_key],
+                    "id": assign_other.selected_dev.data,
+                    "type": "user"
+                }
+                base_url_trimmed = request.base_url[:len(request.base_url) - 15]
+                endpoint = "/{}".format(assign_other.selected_issue_to_add.data)
+                full_url = "{}issues{}".format(base_url_trimmed, endpoint)
+                response = requests.post(full_url, json=add_user_request)
+                if response.status_code == 201 or response.status_code == 200:
+                    flash("Successfully assigned user to issue.")
+                    for current_issue in project_issues:
+                        current_issue.update(idToken)
+                else:
+                    message = "Unsuccessful in assigning user to issue. Status Code: {}".format(response.status_code)
+            
+        except:
+                flash("An internal error occurred while processing this request.")
+
+    if current_user.is_client():
+        return "Not implemented"
+    elif current_user.is_developer():
+        return render_template("project_home_template.html", title="Project Home", create_issue=create_project_issue, self_assign=self_assign, project=project_data, issues=project_issues)
+    elif current_user.is_admin():
+        return render_template("project_home_template.html", title="Project Home", create_issue=create_project_issue, self_assign=self_assign, project=project_data, issues=project_issues, assign_other=assign_other)
+    else:
+        return "Invalid user type."
+
+@app.route("/home/projects/<int:project_id>/<int:issue_id>", methods=["GET", "POST"])
+@login_required
+def issue_detail(project_id, issue_id):
+    idToken = current_user.firebase_token
+    if db.child("Issues").child(issue_id).get(token=idToken).val() is None:
+        return {"error": "Issue not found!"}, 404
+
+    project_issues = db.child("Projects").child(project_id).child("Issues").get(token=idToken).val()
+    if not current_user.is_admin():
+        if not isinstance(project_issues, list) or issue_id not in project_issues:
+            return {"error": "Issue is not included in this project!"}, 401
+    
+    project_assignees = db.child("Projects").child(project_id).child("Assignees").get(token=idToken).val()
+    if not current_user.is_admin():
+        if not isinstance(project_assignees, list) or int(current_user.get_id()) not in project_assignees:
+            return {"error": "User not member of this project!"}, 401
+
+    dev_choices = db.child("Projects").child(project_id).child("Assignees").get(token=idToken).val()
+    if not isinstance(dev_choices, list):
+        dev_choices = None
+    else:
+        for x in range(len(dev_choices)):
+            first_name = db.child("Users").child(dev_choices[x]).child("First Name").get(token=idToken).val()
+            last_name = db.child("Users").child(dev_choices[x]).child("Last Name").get(token=idToken).val()
+            user_type = db.child("Users").child(dev_choices[x]).child("Type").get(token=idToken).val()
+            entry = "{}{} ({})".format(first_name, last_name, user_type)
+            dev_choices[x] = tuple([dev_choices[x], entry])
+
+    self_assign = SelfAssignInIssueForm()
+    assign_other = AddUserToIssueWithinForm()
+    assign_other.selected_dev.choices = dev_choices
+
+    issue = IssueData(idToken, issue_id, request.host_url, project_id)
+
+    if request.method == "POST":
+        try:
+            if self_assign.submit.data and self_assign.validate():
+                idToken_key = "{}_idToken".format(int(current_user.get_id()))
+                add_user_request = {
+                    "idToken": server_session[idToken_key],
+                    "id": int(current_user.get_id()),
+                }
+                base_url_trimmed = request.base_url[:len(request.base_url) - 18]
+                endpoint = "/{}".format(issue_id)
+                full_url = "{}issues{}".format(base_url_trimmed, endpoint)
+                response = requests.post(full_url, json=add_user_request)
+                if response.status_code == 201 or response.status_code == 200:
+                    flash("Successfully self-assigned to issue.")
+                    issue.update(idToken)
+                else:
+                    message = "Unsuccessful self-assigning to issue. Status Code: {}".format(response.status_code)
+                    flash(message)
+            elif assign_other.submit_to_issue.data and assign_other.validate():
+                idToken_key = "{}_idToken".format(int(current_user.get_id()))
+                add_user_request = {
+                    "idToken": server_session[idToken_key],
+                    "id": assign_other.selected_dev.data,
+                }
+                base_url_trimmed = request.base_url[:len(request.base_url) - 18]
+                endpoint = "/{}".format(issue_id)
+                full_url = "{}issues{}".format(base_url_trimmed, endpoint)
+                response = requests.post(full_url, json=add_user_request)
+                if response.status_code == 201 or response.status_code == 200:
+                    flash("Successfully assigned user to issue.")
+                    issue.update(idToken)
+                else:
+                    message = "Unsuccessful in assigning user to issue. Status Code: {}".format(response.status_code)
+            
+        except:
+                flash("An internal error occurred while processing this request.")
+
+    if current_user.is_client():
+        return "Not implemented"
+    elif current_user.is_developer():
+        return render_template("issue_home_template.html", title="Issue Home", self_assign=self_assign, issue=issue)
+    elif current_user.is_admin():
+        return render_template("issue_home_template.html", title="Issue Home", self_assign=self_assign, issue=issue, assign_other=assign_other)
+    else:
+        return "Invalid user type."
