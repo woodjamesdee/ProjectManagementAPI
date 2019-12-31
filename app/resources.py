@@ -4,7 +4,6 @@ from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 from flask import session as server_session
 from flask import request
-from flask_cors import cross_origin
 
 class CredResource(Resource):
     pass
@@ -28,6 +27,7 @@ class Issue(CredResource):
         parser = reqparse.RequestParser()
         parser.add_argument("idToken", required=True)
         parser.add_argument("id", required=True)
+        parser.add_argument("status", required=True)
         args = parser.parse_args()
         idToken = args["idToken"]
         entries = db.child("Issues").get(token=idToken).each()
@@ -36,10 +36,10 @@ class Issue(CredResource):
         for entry in entries:
             entry_keys.append(entry.key())
 
-        if issue_id not in entry_keys:
+        if str(issue_id) not in entry_keys:
             return {"error": "Issue Not Found"}, 404
 
-        if args["id"] == "":
+        if args["id"] == "" and args["status"] == "":
 
             name = db.child("Issues").child(issue_id).child("Name").get(token=idToken).val()
             description = db.child("Issues").child(issue_id).child("Description").get(token=idToken).val()
@@ -59,19 +59,18 @@ class Issue(CredResource):
             }
 
             return data, 200
-
-        #print("In issue post")
-
-        current_users = db.child("Issues").child(issue_id).child("Assignees").get(token=idToken).val()
-        if current_users is None or current_users == "":
-            current_users = [int(args["id"])]
-            #print("Creating users list")
+        elif args["status"] == "":
+            current_users = db.child("Issues").child(issue_id).child("Assignees").get(token=idToken).val()
+            if current_users is None or current_users == "":
+                current_users = [int(args["id"])]
+            elif int(args["id"]) in current_users:
+                return {"error": "User already assigned to issue."}, 400
+            else:
+                current_users.append(int(args["id"]))
+            db.child("Issues").child(issue_id).child("Assignees").set(current_users, token=idToken)
         else:
-            current_users.append(int(args["id"]))
-            #print("Appending to users list")
-        db.child("Issues").child(issue_id).child("Assignees").set(current_users, token=idToken)
-        #print("Set assignees")
-        
+            new_status = args["status"]
+            db.child("Issues").child(issue_id).child("Status").set(new_status, token=idToken)
         return 201
 
         
@@ -136,6 +135,8 @@ class Project(CredResource):
             current_users = db.child("Projects").child(project_id).child("Assignees").get(token=idToken).val()
             if current_users is None or current_users == "":
                 current_users = [int(args["id"])]
+            elif int(args["id"]) in current_users:
+                return {"error": "User already a member of this project."}, 400
             else:
                 current_users.append(int(args["id"]))
             db.child("Projects").child(project_id).child("Assignees").set(current_users, token=idToken)
@@ -143,6 +144,8 @@ class Project(CredResource):
             current_issues = db.child("Projects").child(project_id).child("Issues").get(token=idToken).val()
             if current_issues is None or current_issues == "":
                 current_issues = [int(args["id"])]
+            elif int(args["id"]) in current_issues:
+                return {"error": "Issue already a member of this project."}, 400
             else:
                 current_issues.append(int(args["id"]))
             db.child("Projects").child(project_id).child("Issues").set(current_issues, token=idToken)
@@ -258,6 +261,8 @@ class ProjectList(CredResource):
                 entry_keys.append(entry.key())
 
             return {"ids": entry_keys}, 200
+
+        
 
         new_id = db.child("NextID").get(token=idToken).val()
         db.child("NextID").set((new_id + 1), token=idToken)

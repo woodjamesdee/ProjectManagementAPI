@@ -7,3 +7,4 @@ wtforms==2.2.1
 Flask-WTF==0.14.2
 Werkzeug==0.16.0
 Flask-Bootstrap==3.3.7.1
+requests==2.11.1

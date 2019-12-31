@@ -12,6 +12,7 @@
                     Projected Completion Date: {{ project.end_date }} <br>
                     Issues Created: {{ project.issue_count }} <br>
                     Issues Completed: {{ project.issue_percent }}% <br>
+                    Project Assignees: {{ project.assignees }} <br> <br>
                 </div>
                 <div class="col-md-4">
                     <h1>Project Issues</h1>
@@ -20,7 +21,6 @@
                             <i><b><a href='{{ issue.url }}'>{{ issue.name }}</a></b></i><br>
                             Description: {{ issue.description }} <br>
                             Priority: {{ issue.priority }} <br>
-                            Labels: {{ issue.labels }} <br>
                             Assignees: {{ issue.assignees }} <br> <br>
                         {% endfor %}
                     {% else %}

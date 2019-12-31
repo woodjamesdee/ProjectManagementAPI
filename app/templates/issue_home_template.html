@@ -10,17 +10,22 @@
                     <i><b><a href='{{  issue.url }}'>{{ issue.name }}</a></b></i><br>
                     Description: {{ issue.description }} <br>
                     Priority: {{ issue.priority }} <br>
-                    Labels: {{ issue.labels }} <br>
                     Assignees: {{ issue.assignees }} <br> <br>
+                    <i><a href='{{ issue.project_url }}'>Back to Project</a></i>
                 </div>
                 <div class="col-md-6">
                     <h1>Self-Assign To Issue</h1>
-                    <br>
                     {{ wtf.quick_form(self_assign) }}
+                    <br>
                     {% if assign_other %}
                     <h1>Assign User To Issue</h1>
-                    <br>
                     {{ wtf.quick_form(assign_other) }}
+                    <br>
+                    {% endif %}
+                    {% if close_issue %}
+                    <h1>Close Issue</h1>
+                    {{ wtf.quick_form(close_issue) }}
+                    <br>
                     {% endif %}
                 </div>
                 {% else %}

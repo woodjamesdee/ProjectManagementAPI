@@ -4,43 +4,51 @@
     <div class="body-content">
         <div class="container-fluid">
             <div class="row">
-                {% if projects and create_issue %}
                 <div class="col-md-4">
                     <h1>Project Progress Reports</h1><br>
+                    {% if projects %}
                     {% for project in projects %}
                         <i><b><a href='{{  project.url }}'>{{ project.name }}</a></b></i><br>
                         Start Date: {{ project.start_date }} <br>
                         Projected Completion Date: {{ project.end_date }} <br>
                         Issues Created: {{ project.issue_count }} <br>
                         Issues Completed: {{ project.issue_percent }}% <br>
+                        Project Assignees: {{ project.assignees }} <br> <br>
                     {% endfor %}
+                    {% else %}
+                        There are currently no projects.
+                    {% endif %}
                 </div>
                 <div class="col-md-4">
-                    <h1>Currently Assigned Issues</h1>
+                    <h1>Currently Assigned Issues</h1><br>
                     {% if issues %}
-                        
                         {% for issue in issues %}
                             <i><b><a href='{{  issue.url }}'>{{ issue.name }}</a></b></i><br>
                             Description: {{ issue.description }} <br>
                             Priority: {{ issue.priority }} <br>
-                            Labels: {{ issue.labels }} <br>
-                            Assignees: {{ issue.assignees }} <br>
+                            Assignees: {{ issue.assignees }} <br> <br>
                         {% endfor %}
                     {% else %}
                     No currently assigned issues.
                     {% endif %}
                 </div>
                 <div class="col-md-4">
+                    {% if create_issue %}
                     <h1>Create New Issue</h1>
                     {{ wtf.quick_form(create_issue) }}
+                    <br>
+                    {% endif %}
                     {% if add_user %}
                     <h1>Add User To Project</h1>
                     {{ wtf.quick_form(add_user) }}
+                    <br>
+                    {% endif %}
+                    {% if create_project %}
+                    <h1>Create New Project</h1>
+                    {{ wtf.quick_form(create_project) }}
+                    <br>
                     {% endif %}
                 </div>
-                {% else %}
-                You are not currently a part of any projects.
-                {% endif %}
             </div>
         </div>
     </div>
