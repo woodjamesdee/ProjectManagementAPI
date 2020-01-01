@@ -1,1 +1,1 @@
-web: gunicorn projectmanagementapp:app
+web: gunicorn app:app
