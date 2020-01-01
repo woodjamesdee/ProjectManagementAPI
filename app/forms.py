@@ -175,6 +175,8 @@ def handle_add_user_to_project(idToken, add_user_to_project, base_url, project_l
     response = requests.post(full_url, json=add_user_request)
     if response.status_code == 201 or response.status_code == 200:
         flash("Successfully added user to project.")
+    elif response.status_code == 400:
+        flash("Error: User is already a member of this project.")
     else:
         message = "Unsuccessful in adding user to project. Status Code: {}".format(response.status_code)
         flash(message)
@@ -200,6 +202,8 @@ def handle_assign_issue_in_project(idToken, user_id, base_url, selected_issue_da
         flash("Successfully assigned to issue.")
         for current_issue in project_issues:
             current_issue.update(idToken)
+    elif response.status_code == 400:
+        flash("Error: User is already assigned to this issue.")
     else:
         message = "Unsuccessful assigning to issue. Status Code: {}".format(response.status_code)
         flash(message)
@@ -237,6 +241,8 @@ def handle_issue_forms(idToken, user_id, base_url, issue):
     if response.status_code == 201 or response.status_code == 200:
         flash("Successfully assigned to issue.")
         issue.update(idToken)
+    elif response.status_code == 400:
+        flash("Error: User is already assigned to this issue.")
     else:
         message = "Unsuccessful assigning to issue. Status Code: {}".format(response.status_code)
         flash(message)
