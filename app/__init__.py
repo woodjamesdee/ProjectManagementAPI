@@ -13,7 +13,14 @@ api = Api(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 app.config.from_object(__name__)
-app.config["SECRET_KEY"] = os.urandom(24)
+try:
+    with open("secret_key", "rb") as read_file:
+        app.config["SECRET_KEY"] = read_file.read()
+except:
+    from gen_secret import generate_secret_key
+    generate_secret_key()
+    with open("secret_key", "rb") as read_file:
+        app.config["SECRET_KEY"] = read_file.read()
 app.config["SESSION_TYPE"] = "filesystem"
 
 Session(app)
