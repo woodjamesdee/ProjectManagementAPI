@@ -21,7 +21,7 @@ api.add_resource(UserResource, "/users/<int:user_id>")
 
 @app.route("/")
 def index():
-    return "Hello World!"
+    return redirect(url_for("home"))
 
 @login_manager.user_loader
 def load_user(user_id):
