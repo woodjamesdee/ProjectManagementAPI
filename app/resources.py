@@ -36,7 +36,7 @@ class Issue(CredResource):
         for entry in entries:
             entry_keys.append(entry.key())
 
-        if str(issue_id) not in entry_keys:
+        if str(issue_id) not in entry_keys and issue_id not in entry_keys:
             return {"error": "Issue Not Found"}, 404
 
         if args["id"] == "" and args["status"] == "":
@@ -102,7 +102,7 @@ class Project(CredResource):
         for entry in entries:
             entry_keys.append(str(entry.key()))
 
-        if str(project_id) not in entry_keys:
+        if str(project_id) not in entry_keys and project_id not in entry_keys:
             print("Project not found!")
             print("Project ID: ", project_id)
             return {"error": "Project Not Found"}, 404
@@ -180,7 +180,7 @@ class UserResource(CredResource):
         for entry in entries:
             entry_keys.append(entry.key())
 
-        if user_id not in entry_keys:
+        if user_id not in entry_keys and str(user_id) not in entry_keys:
             return {"error": "User Not Found"}, 404
 
         first_name = db.child("Users").child(user_id).child("First Name").get(token=idToken).val()
